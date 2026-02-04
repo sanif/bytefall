@@ -13,18 +13,63 @@ import (
 	"github.com/sanif/bytefall/pkg/data"
 )
 
-// matrixOnlyMode shows only the matrix animation
+// WidgetMode defines which fullscreen widget to show
+type WidgetMode int
+
+const (
+	WidgetNone        WidgetMode = iota // Normal 4-panel mode
+	WidgetMatrix                        // Matrix rain
+	WidgetSpeed                         // Network speed gauges
+	WidgetLeaderboard                   // Domain rankings
+	WidgetProcesses                     // Process map
+	WidgetTimeline                      // Activity sparklines
+	WidgetGraph                         // Connection graph
+)
+
+var widgetMode WidgetMode = WidgetNone
+
+// WidgetOptions configures fullscreen widget display
+type WidgetOptions struct {
+	ShowStatusBar bool // Show status bar (default: false for clean mode)
+	ShowDownload  bool // Show download speed in status bar
+	ShowUpload    bool // Show upload speed in status bar
+	ShowDomains   bool // Show domain count
+	ShowIP        bool // Show local IP address
+	ShowPublicIP  bool // Show public IP address
+}
+
+// Default: clean mode (no status bar)
+var widgetOpts = WidgetOptions{
+	ShowStatusBar: false,
+	ShowDownload:  true,
+	ShowUpload:    true,
+	ShowDomains:   true,
+	ShowIP:        false,
+	ShowPublicIP:  false,
+}
+
+// SetWidgetMode sets which fullscreen widget to show
+func SetWidgetMode(mode WidgetMode) {
+	widgetMode = mode
+}
+
+// SetWidgetOptions sets display options for widget mode
+func SetWidgetOptions(opts WidgetOptions) {
+	widgetOpts = opts
+}
+
+// Legacy compatibility
 var matrixOnlyMode bool
 
-// MatrixOptions configures what to show in matrix mode
+// MatrixOptions configures what to show in matrix mode (legacy)
 type MatrixOptions struct {
-	ShowInfo     bool // Show status bar
-	ShowDownload bool // Show download speed
-	ShowUpload   bool // Show upload speed
-	ShowDomains  bool // Show domain count
-	ShowIP       bool // Show local IP address
-	ShowPublicIP bool // Show public IP address
-	Minimal      bool // No status bar at all
+	ShowInfo     bool
+	ShowDownload bool
+	ShowUpload   bool
+	ShowDomains  bool
+	ShowIP       bool
+	ShowPublicIP bool
+	Minimal      bool
 }
 
 var matrixOpts = MatrixOptions{
@@ -37,14 +82,27 @@ var matrixOpts = MatrixOptions{
 	Minimal:      false,
 }
 
-// SetMatrixOnly enables or disables matrix-only mode
+// SetMatrixOnly enables or disables matrix-only mode (legacy - use SetWidgetMode)
 func SetMatrixOnly(enabled bool) {
 	matrixOnlyMode = enabled
+	if enabled {
+		widgetMode = WidgetMatrix
+	} else {
+		widgetMode = WidgetNone
+	}
 }
 
-// SetMatrixOptions sets display options for matrix mode
+// SetMatrixOptions sets display options for matrix mode (legacy - use SetWidgetOptions)
 func SetMatrixOptions(opts MatrixOptions) {
 	matrixOpts = opts
+	widgetOpts = WidgetOptions{
+		ShowStatusBar: opts.ShowInfo && !opts.Minimal,
+		ShowDownload:  opts.ShowDownload,
+		ShowUpload:    opts.ShowUpload,
+		ShowDomains:   opts.ShowDomains,
+		ShowIP:        opts.ShowIP,
+		ShowPublicIP:  opts.ShowPublicIP,
+	}
 }
 
 // FocusPanel indicates which panel is focused
@@ -347,9 +405,27 @@ func (m *Model) updateFocus() {
 }
 
 func (m *Model) resizePanels() {
-	// Matrix-only mode - full screen
-	if matrixOnlyMode {
-		m.matrix.Resize(m.width, m.height-1)
+	// Widget mode - full screen for the widget
+	if widgetMode != WidgetNone {
+		contentHeight := m.height
+		if widgetOpts.ShowStatusBar {
+			contentHeight = m.height - 1
+		}
+		// Resize the appropriate panel based on widget mode
+		switch widgetMode {
+		case WidgetMatrix:
+			m.matrix.Resize(m.width, contentHeight)
+		case WidgetSpeed:
+			// Speed widget uses full dimensions
+		case WidgetLeaderboard:
+			m.leaderboard.Resize(m.width-4, contentHeight-2)
+		case WidgetProcesses:
+			m.processMap.Resize(m.width-4, contentHeight-2)
+		case WidgetTimeline:
+			m.timeline.Resize(m.width-4, contentHeight-2)
+		case WidgetGraph:
+			m.connGraph.Resize(m.width-4, contentHeight-2)
+		}
 		return
 	}
 
@@ -450,9 +526,20 @@ func (m Model) View() string {
 		return m.renderConnGraphView(theme)
 	}
 
-	// Matrix-only mode
-	if matrixOnlyMode {
-		return m.renderMatrixOnly(theme)
+	// Widget mode routing
+	switch widgetMode {
+	case WidgetMatrix:
+		return m.renderWidgetMatrix(theme)
+	case WidgetSpeed:
+		return m.renderWidgetSpeed(theme)
+	case WidgetLeaderboard:
+		return m.renderWidgetLeaderboard(theme)
+	case WidgetProcesses:
+		return m.renderWidgetProcesses(theme)
+	case WidgetTimeline:
+		return m.renderWidgetTimeline(theme)
+	case WidgetGraph:
+		return m.renderWidgetGraph(theme)
 	}
 
 	// Mini mode
@@ -469,20 +556,8 @@ func (m Model) View() string {
 	return m.renderNormal(theme)
 }
 
-func (m Model) renderMatrixOnly(theme Theme) string {
-	// Minimal mode - just the matrix, no status bar
-	if matrixOpts.Minimal {
-		m.matrix.Resize(m.width, m.height)
-		return m.matrix.View()
-	}
-
-	// No info mode - matrix only
-	if !matrixOpts.ShowInfo {
-		m.matrix.Resize(m.width, m.height)
-		return m.matrix.View()
-	}
-
-	// Status bar at top
+// renderStatusBar creates a reusable status bar for widget modes
+func (m Model) renderStatusBar(theme Theme) string {
 	dimStyle := lipgloss.NewStyle().Foreground(theme.Dim)
 	primaryStyle := lipgloss.NewStyle().Foreground(theme.Primary)
 	accentStyle := lipgloss.NewStyle().Foreground(theme.Accent).Bold(true)
@@ -493,27 +568,27 @@ func (m Model) renderMatrixOnly(theme Theme) string {
 	var leftParts []string
 	leftParts = append(leftParts, primaryStyle.Render("◆ BYTEFALL"))
 
-	if matrixOpts.ShowDownload {
+	if widgetOpts.ShowDownload {
 		leftParts = append(leftParts, accentStyle.Render("↓ "+formatRate(m.bytesPerSec)))
 	}
 
-	if matrixOpts.ShowUpload {
+	if widgetOpts.ShowUpload {
 		uploadStyle := lipgloss.NewStyle().Foreground(theme.Secondary).Bold(true)
 		leftParts = append(leftParts, uploadStyle.Render("↑ "+formatRate(m.uploadBytesPerSec)))
 	}
 
-	if matrixOpts.ShowDomains {
+	if widgetOpts.ShowDomains {
 		leftParts = append(leftParts, dimStyle.Render(fmt.Sprintf("%d domains", m.totalDomains)))
 	}
 
-	if matrixOpts.ShowIP && m.netMonitor != nil {
+	if widgetOpts.ShowIP && m.netMonitor != nil {
 		info := m.netMonitor.GetInfo()
 		if info.IPv4 != "" {
 			leftParts = append(leftParts, dimStyle.Render(info.Interface+":")+primaryStyle.Render(info.IPv4))
 		}
 	}
 
-	if matrixOpts.ShowPublicIP && m.netMonitor != nil {
+	if widgetOpts.ShowPublicIP && m.netMonitor != nil {
 		info := m.netMonitor.GetInfo()
 		if info.PublicIP != "" {
 			leftParts = append(leftParts, dimStyle.Render("pub:")+accentStyle.Render(info.PublicIP))
@@ -542,13 +617,151 @@ func (m Model) renderMatrixOnly(theme Theme) string {
 		padding = 0
 	}
 
-	statusBar := leftPart + strings.Repeat(" ", padding) + rightPart
+	return leftPart + strings.Repeat(" ", padding) + rightPart
+}
 
-	// Full screen matrix (height - 1 for status bar)
-	m.matrix.Resize(m.width, m.height-1)
+// renderWidgetMatrix renders fullscreen matrix rain widget
+func (m Model) renderWidgetMatrix(theme Theme) string {
+	contentHeight := m.height
+	if widgetOpts.ShowStatusBar {
+		contentHeight = m.height - 1
+	}
+
+	m.matrix.Resize(m.width, contentHeight)
 	content := m.matrix.View()
 
-	return statusBar + "\n" + content
+	if widgetOpts.ShowStatusBar {
+		statusBar := m.renderStatusBar(theme)
+		return statusBar + "\n" + content
+	}
+
+	return content
+}
+
+// renderWidgetSpeed renders fullscreen network speed widget
+func (m Model) renderWidgetSpeed(theme Theme) string {
+	contentHeight := m.height
+	if widgetOpts.ShowStatusBar {
+		contentHeight = m.height - 1
+	}
+
+	content := RenderSpeedWidget(m.width, contentHeight, m.bytesPerSec, m.uploadBytesPerSec, m.totalPackets, theme)
+
+	if widgetOpts.ShowStatusBar {
+		statusBar := m.renderStatusBar(theme)
+		return statusBar + "\n" + content
+	}
+
+	return content
+}
+
+// renderWidgetLeaderboard renders fullscreen domain rankings widget
+func (m Model) renderWidgetLeaderboard(theme Theme) string {
+	contentHeight := m.height
+	if widgetOpts.ShowStatusBar {
+		contentHeight = m.height - 1
+	}
+
+	m.leaderboard.Resize(m.width-4, contentHeight-2)
+	content := m.leaderboard.View()
+
+	borderStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(theme.BorderFocus)
+
+	panel := borderStyle.
+		Width(m.width - 2).
+		Render(truncateHeight(content, contentHeight-2))
+
+	if widgetOpts.ShowStatusBar {
+		statusBar := m.renderStatusBar(theme)
+		return statusBar + "\n" + panel
+	}
+
+	return panel
+}
+
+// renderWidgetProcesses renders fullscreen process map widget
+func (m Model) renderWidgetProcesses(theme Theme) string {
+	contentHeight := m.height
+	if widgetOpts.ShowStatusBar {
+		contentHeight = m.height - 1
+	}
+
+	m.processMap.Resize(m.width-4, contentHeight-2)
+	content := m.processMap.View()
+
+	borderStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(theme.BorderFocus)
+
+	panel := borderStyle.
+		Width(m.width - 2).
+		Render(truncateHeight(content, contentHeight-2))
+
+	if widgetOpts.ShowStatusBar {
+		statusBar := m.renderStatusBar(theme)
+		return statusBar + "\n" + panel
+	}
+
+	return panel
+}
+
+// renderWidgetTimeline renders fullscreen activity timeline widget
+func (m Model) renderWidgetTimeline(theme Theme) string {
+	contentHeight := m.height
+	if widgetOpts.ShowStatusBar {
+		contentHeight = m.height - 1
+	}
+
+	m.timeline.Resize(m.width-4, contentHeight-2)
+	content := m.timeline.View()
+
+	borderStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(theme.BorderFocus)
+
+	panel := borderStyle.
+		Width(m.width - 2).
+		Render(truncateHeight(content, contentHeight-2))
+
+	if widgetOpts.ShowStatusBar {
+		statusBar := m.renderStatusBar(theme)
+		return statusBar + "\n" + panel
+	}
+
+	return panel
+}
+
+// renderWidgetGraph renders fullscreen connection graph widget
+func (m Model) renderWidgetGraph(theme Theme) string {
+	contentHeight := m.height
+	if widgetOpts.ShowStatusBar {
+		contentHeight = m.height - 1
+	}
+
+	m.connGraph.Resize(m.width-4, contentHeight-2)
+	content := m.connGraph.View()
+
+	borderStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(theme.BorderFocus)
+
+	panel := borderStyle.
+		Width(m.width - 2).
+		Render(truncateHeight(content, contentHeight-2))
+
+	if widgetOpts.ShowStatusBar {
+		statusBar := m.renderStatusBar(theme)
+		return statusBar + "\n" + panel
+	}
+
+	return panel
+}
+
+// renderMatrixOnly is kept for legacy compatibility
+func (m Model) renderMatrixOnly(theme Theme) string {
+	return m.renderWidgetMatrix(theme)
 }
 
 func (m Model) renderMiniMode(theme Theme) string {

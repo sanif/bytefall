@@ -17,6 +17,8 @@ ByteFall answers the question: *"Where is my data actually going right now?"* �
 - **Process Mapping** — See which applications are connecting to which domains
 - **Activity Timeline** — 60-second sparkline history per domain
 - **Connection Graph** — Animated visualization of active connections
+- **Network Speed Widget** — Large fullscreen speed display with ↓/↑ gauges
+- **Widget Modes** — Run any panel as a clean fullscreen widget
 - **SNI Extraction** — Identifies domains from TLS ClientHello handshakes
 - **Process Detection** — Maps network connections to their source processes
 - **5 Color Themes** — Matrix, Cyberpunk, Amber, Ocean, Blood
@@ -53,6 +55,13 @@ ByteFall answers the question: *"Where is my data actually going right now?"* �
 ---
 
 ## Installation
+
+### Homebrew (Recommended)
+
+```bash
+brew tap sanif/tap
+brew install bytefall
+```
 
 ### Using Go
 
@@ -98,13 +107,22 @@ Options:
   -list             List available network interfaces
   -demo             Run in demo mode with simulated traffic
   -theme <name>     Color theme: matrix, cyberpunk, amber, ocean, blood
-  -matrix           Show only the matrix animation panel
-  -minimal          Hide status bar completely
+  -version          Show version
+  -help             Show help message
 
-Status Bar Options:
-  -down             Show download speed
-  -up               Show upload speed
-  -domains          Show active domain count
+Widget Modes (fullscreen, clean by default):
+  -matrix           Fullscreen matrix rain widget
+  -speed            Fullscreen network speed widget with gauges
+  -leaderboard      Fullscreen domain rankings widget
+  -processes        Fullscreen process map widget
+  -timeline         Fullscreen activity timeline widget
+  -graph            Fullscreen connection graph widget
+
+Status Bar Options (for widget modes):
+  -bar              Show status bar in widget mode (off by default)
+  -down             Show download speed (default: true)
+  -up               Show upload speed (default: true)
+  -domains          Show active domain count (default: true)
   -ip               Show local IP address
   -public-ip        Show public IP address
 ```
@@ -113,16 +131,27 @@ Status Bar Options:
 
 ```bash
 # List available interfaces
-./bytefall -list
+bytefall -list
 
 # Capture on specific interface
-sudo ./bytefall -i en0
+sudo bytefall -i en0
 
-# Cyberpunk theme with matrix-only view
-sudo ./bytefall -theme cyberpunk -matrix
+# Demo mode (no sudo required)
+bytefall -demo
 
-# Demo mode with ocean theme
-./bytefall -demo -theme ocean
+# Cyberpunk theme
+sudo bytefall -theme cyberpunk
+
+# Widget modes (clean, fullscreen)
+bytefall -demo -matrix           # Matrix rain
+bytefall -demo -speed            # Network speed with ↓/↑ gauges
+bytefall -demo -leaderboard      # Domain rankings
+bytefall -demo -timeline         # Activity sparklines
+bytefall -demo -graph            # Connection graph
+
+# Widget with status bar
+bytefall -demo -matrix -bar
+bytefall -demo -speed -bar -ip -public-ip
 ```
 
 ---
@@ -142,6 +171,46 @@ sudo ./bytefall -theme cyberpunk -matrix
 | `d` | Show domain details |
 | `g` | Toggle connection graph |
 | `?` | Show help |
+
+---
+
+## Widget Modes
+
+ByteFall can run any panel as a clean, fullscreen widget — perfect for desktop dashboards or ambient displays.
+
+| Flag | Widget | Description |
+|------|--------|-------------|
+| `-matrix` | Matrix Rain | Animated falling characters |
+| `-speed` | Network Speed | Large ↓/↑ speed display with gauges |
+| `-leaderboard` | Domain Rankings | Full-screen sorted domain list |
+| `-processes` | Process Map | Process-to-domain tree view |
+| `-timeline` | Activity Timeline | Sparklines for all domains |
+| `-graph` | Connection Graph | Process cards with connections |
+
+By default, widget modes show only the content (clean mode). Add `-bar` to include a status bar with network info.
+
+```bash
+# Clean matrix rain (no status bar)
+bytefall -demo -matrix
+
+# Speed widget with status bar showing IP
+bytefall -demo -speed -bar -ip
+
+# Leaderboard with full network info
+bytefall -demo -leaderboard -bar -ip -public-ip
+```
+
+### Speed Widget Preview
+
+```
+                    ↓ 12.5 MB/s
+         ████████████████░░░░░░░░░░░░░░
+
+                    ↑ 3.2 MB/s
+         █████░░░░░░░░░░░░░░░░░░░░░░░░░
+
+                 ◈ 1,234 packets/s
+```
 
 ---
 
@@ -204,6 +273,23 @@ Packets → Capture → SNI/DNS Resolution → Process Mapping → Aggregation �
 - [bubbles](https://github.com/charmbracelet/bubbles) — TUI components
 - [lipgloss](https://github.com/charmbracelet/lipgloss) — Styling and layout
 - [gopacket](https://github.com/google/gopacket) — Packet capture and parsing
+
+---
+
+## Shell Completion
+
+ByteFall supports shell completion for bash, zsh, and fish.
+
+```bash
+# Bash (add to ~/.bashrc)
+eval "$(bytefall -completion bash)"
+
+# Zsh (add to ~/.zshrc)
+eval "$(bytefall -completion zsh)"
+
+# Fish (add to ~/.config/fish/config.fish)
+bytefall -completion fish | source
+```
 
 ---
 

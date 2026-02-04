@@ -23,15 +23,27 @@ func main() {
 	showVersion := flag.Bool("version", false, "Show version")
 	showHelp := flag.Bool("help", false, "Show help")
 	completion := flag.String("completion", "", "Generate shell completion (bash, zsh, fish)")
-	matrixOnly := flag.Bool("matrix", false, "Show only the matrix animation (minimal mode)")
 	theme := flag.String("theme", "matrix", "Color theme (matrix, cyberpunk, amber, ocean, blood)")
-	showInfo := flag.Bool("info", true, "Show status bar with network info (matrix mode)")
+
+	// Widget mode flags (mutually exclusive)
+	matrixOnly := flag.Bool("matrix", false, "Fullscreen matrix rain widget")
+	speedOnly := flag.Bool("speed", false, "Fullscreen network speed widget")
+	leaderboardOnly := flag.Bool("leaderboard", false, "Fullscreen domain leaderboard widget")
+	processesOnly := flag.Bool("processes", false, "Fullscreen process map widget")
+	timelineOnly := flag.Bool("timeline", false, "Fullscreen activity timeline widget")
+	graphOnly := flag.Bool("graph", false, "Fullscreen connection graph widget")
+
+	// Status bar options (off by default in widget mode)
+	showBar := flag.Bool("bar", false, "Show status bar in widget mode")
 	showDownload := flag.Bool("down", true, "Show download speed in status bar")
 	showUpload := flag.Bool("up", true, "Show upload speed in status bar")
 	showDomains := flag.Bool("domains", true, "Show domain count in status bar")
 	showIP := flag.Bool("ip", false, "Show IP address in status bar")
 	showPublicIP := flag.Bool("public-ip", false, "Show public IP address in status bar")
-	minimal := flag.Bool("minimal", false, "Minimal mode - no status bar at all (matrix mode)")
+
+	// Legacy flags (kept for compatibility)
+	showInfo := flag.Bool("info", true, "Show status bar with network info (legacy)")
+	minimal := flag.Bool("minimal", false, "Minimal mode - no status bar at all (legacy)")
 	flag.Parse()
 
 	// Help
@@ -69,8 +81,47 @@ func main() {
 	// Set theme
 	ui.SetTheme(*theme)
 
-	// Set matrix-only mode and display options
-	ui.SetMatrixOnly(*matrixOnly)
+	// Determine widget mode (mutually exclusive, first one wins)
+	widgetMode := ui.WidgetNone
+	switch {
+	case *matrixOnly:
+		widgetMode = ui.WidgetMatrix
+	case *speedOnly:
+		widgetMode = ui.WidgetSpeed
+	case *leaderboardOnly:
+		widgetMode = ui.WidgetLeaderboard
+	case *processesOnly:
+		widgetMode = ui.WidgetProcesses
+	case *timelineOnly:
+		widgetMode = ui.WidgetTimeline
+	case *graphOnly:
+		widgetMode = ui.WidgetGraph
+	}
+
+	// Set widget mode and options
+	ui.SetWidgetMode(widgetMode)
+
+	// Determine if status bar should be shown
+	// -bar explicitly enables it, -minimal explicitly disables it
+	// Legacy -info is respected if neither -bar nor -minimal is set
+	showStatusBar := *showBar
+	if *minimal {
+		showStatusBar = false
+	} else if !*showBar && *showInfo && widgetMode != ui.WidgetNone {
+		// Legacy: if -info is true (default) and no explicit -bar, don't show bar by default in widget mode
+		showStatusBar = false
+	}
+
+	ui.SetWidgetOptions(ui.WidgetOptions{
+		ShowStatusBar: showStatusBar,
+		ShowDownload:  *showDownload,
+		ShowUpload:    *showUpload,
+		ShowDomains:   *showDomains,
+		ShowIP:        *showIP,
+		ShowPublicIP:  *showPublicIP,
+	})
+
+	// Legacy compatibility
 	ui.SetMatrixOptions(ui.MatrixOptions{
 		ShowInfo:     *showInfo && !*minimal,
 		ShowDownload: *showDownload,
@@ -166,14 +217,20 @@ OPTIONS:
     -list             List available network interfaces
     -demo             Run in demo mode with simulated traffic (no sudo needed)
     -theme <name>     Color theme: matrix, cyberpunk, amber, ocean, blood
-    -matrix           Show only the matrix animation panel
-    -minimal          Hide status bar completely
     -version          Show version
     -help             Show this help message
     -completion <sh>  Generate shell completion (bash, zsh, fish)
 
-STATUS BAR OPTIONS:
-    -info             Show status bar with network info (default: true)
+WIDGET MODES (fullscreen, clean by default):
+    -matrix           Fullscreen matrix rain widget
+    -speed            Fullscreen network speed widget with gauges
+    -leaderboard      Fullscreen domain rankings widget
+    -processes        Fullscreen process map widget
+    -timeline         Fullscreen activity timeline widget
+    -graph            Fullscreen connection graph widget
+
+STATUS BAR OPTIONS (for widget modes):
+    -bar              Show status bar in widget mode (off by default)
     -down             Show download speed (default: true)
     -up               Show upload speed (default: true)
     -domains          Show active domain count (default: true)
@@ -194,12 +251,17 @@ KEY BINDINGS:
     ?                 Show help overlay
 
 EXAMPLES:
-    sudo bytefall                        # Run with default settings
-    sudo bytefall -i en0                 # Capture on specific interface
-    sudo bytefall -theme cyberpunk       # Use cyberpunk theme
-    bytefall -demo                       # Demo mode (no privileges needed)
-    bytefall -demo -theme ocean          # Demo with ocean theme
-    bytefall -list                       # List available interfaces
+    sudo bytefall                         # Run with default settings
+    sudo bytefall -i en0                  # Capture on specific interface
+    sudo bytefall -theme cyberpunk        # Use cyberpunk theme
+    bytefall -demo                        # Demo mode (no privileges needed)
+    bytefall -demo -matrix                # Matrix rain widget (clean)
+    bytefall -demo -matrix -bar           # Matrix with status bar
+    bytefall -demo -speed                 # Network speed widget
+    bytefall -demo -speed -bar            # Speed widget with status bar
+    bytefall -demo -leaderboard -bar -ip  # Leaderboard with IP info
+    bytefall -demo -timeline              # Activity timeline widget
+    bytefall -demo -graph -bar            # Connection graph with status bar
 
 SHELL COMPLETION:
     # Bash (add to ~/.bashrc)
@@ -222,7 +284,7 @@ _bytefall() {
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    opts="-i -list -demo -matrix -theme -info -down -up -domains -ip -public-ip -minimal -version -completion"
+    opts="-i -list -demo -matrix -speed -leaderboard -processes -timeline -graph -theme -bar -down -up -domains -ip -public-ip -version -completion"
 
     case "${prev}" in
         -i)
@@ -256,15 +318,19 @@ _bytefall() {
         '-i[Network interface to capture from]:interface:->interfaces'
         '-list[List available network interfaces]'
         '-demo[Run in demo mode without packet capture]'
-        '-matrix[Show only the matrix animation]'
+        '-matrix[Fullscreen matrix rain widget]'
+        '-speed[Fullscreen network speed widget]'
+        '-leaderboard[Fullscreen domain leaderboard widget]'
+        '-processes[Fullscreen process map widget]'
+        '-timeline[Fullscreen activity timeline widget]'
+        '-graph[Fullscreen connection graph widget]'
         '-theme[Color theme]:theme:->themes'
-        '-info[Show status bar with network info]'
+        '-bar[Show status bar in widget mode]'
         '-down[Show download speed in status bar]'
         '-up[Show upload speed in status bar]'
         '-domains[Show domain count in status bar]'
         '-ip[Show IP address in status bar]'
         '-public-ip[Show public IP address in status bar]'
-        '-minimal[Minimal mode - no status bar]'
         '-version[Show version]'
         '-completion[Generate shell completion]:shell:->shells'
     )
@@ -297,15 +363,19 @@ complete -c bytefall -f
 complete -c bytefall -s i -d 'Network interface to capture from' -xa "(bytefall -list 2>/dev/null | tail -n +2 | string trim)"
 complete -c bytefall -l list -d 'List available network interfaces'
 complete -c bytefall -l demo -d 'Run in demo mode without packet capture'
-complete -c bytefall -l matrix -d 'Show only the matrix animation'
+complete -c bytefall -l matrix -d 'Fullscreen matrix rain widget'
+complete -c bytefall -l speed -d 'Fullscreen network speed widget'
+complete -c bytefall -l leaderboard -d 'Fullscreen domain leaderboard widget'
+complete -c bytefall -l processes -d 'Fullscreen process map widget'
+complete -c bytefall -l timeline -d 'Fullscreen activity timeline widget'
+complete -c bytefall -l graph -d 'Fullscreen connection graph widget'
 complete -c bytefall -l theme -d 'Color theme' -xa "matrix cyberpunk amber ocean blood"
-complete -c bytefall -l info -d 'Show status bar with network info'
+complete -c bytefall -l bar -d 'Show status bar in widget mode'
 complete -c bytefall -l down -d 'Show download speed in status bar'
 complete -c bytefall -l up -d 'Show upload speed in status bar'
 complete -c bytefall -l domains -d 'Show domain count in status bar'
 complete -c bytefall -l ip -d 'Show IP address in status bar'
 complete -c bytefall -l public-ip -d 'Show public IP address in status bar'
-complete -c bytefall -l minimal -d 'Minimal mode - no status bar'
 complete -c bytefall -l version -d 'Show version'
 complete -c bytefall -l completion -d 'Generate shell completion' -xa "bash zsh fish"
 `
