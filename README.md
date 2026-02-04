@@ -18,7 +18,7 @@ ByteFall answers the question: *"Where is my data actually going right now?"* �
 - **Process Mapping** — See which applications are connecting to which domains
 - **Activity Timeline** — 60-second sparkline history per domain
 - **Connection Graph** — Animated visualization of active connections
-- **Network Speed Widget** — Large fullscreen speed display with 5 visual styles (system-wide)
+- **Network Speed Widget** — Clean fullscreen speed display with 5 unique styles (system-wide)
 - **Bandwidth History** — Historical graphs of download/upload rates with peak/average stats
 - **Top Applications** — Ranked list of apps by bandwidth usage with icons
 - **Widget Modes** — Run any panel as a clean fullscreen widget
@@ -198,7 +198,7 @@ ByteFall can run any panel as a clean, fullscreen widget — perfect for desktop
 | Flag | Widget | Description |
 |------|--------|-------------|
 | `-matrix` | Matrix Rain | Animated falling characters colored by traffic |
-| `-speed` | Network Speed | Large ↓/↑ speed display with gauges |
+| `-speed` | Network Speed | Clean ↓/↑ speed display, 5 styles |
 | `-leaderboard` | Domain Rankings | Full-screen sorted domain list |
 | `-processes` | Process Map | Process-to-domain tree view |
 | `-timeline` | Activity Timeline | Sparklines for all domains |
@@ -227,46 +227,32 @@ bytefall -demo -apps -bar -public-ip
 
 ### Speed Widget
 
-Large **system-wide** network speed display with animated gauges and 5 visual styles. Shows actual bandwidth across all protocols and ports (not just HTTP/HTTPS).
+**System-wide** network speed display with 5 unique visual styles. Shows actual bandwidth across all protocols and ports.
 
 **Styles** (set via `-speed-style` or press `s` to cycle):
 
 | Style | Description |
 |-------|-------------|
-| `minimal` | Clean arrows and numbers |
-| `boxed` | Decorative frames and gauges (default) |
-| `retro` | Old terminal green aesthetic |
-| `neon` | Cyberpunk pink/cyan glow |
-| `compact` | Dense single-line display |
-
-**Auto-sizing**: Digits scale based on terminal size (large/medium/small).
+| `minimal` | Just the numbers - `▼ 1.23 MB/s` (default) |
+| `boxed` | "NETSPEED" title with labels and progress bars |
+| `retro` | Green terminal `RX`/`TX` with `[####----]` bars |
+| `neon` | Cyberpunk `▼▼▼`/`▲▲▲` arrows in cyan/pink |
+| `compact` | Both speeds on one line, side-by-side bars |
 
 ```
-            ╭─────  NETWORK SPEED  ─────╮
+minimal:     ▼ 12.34 MB/s
+             ▲ 1.23 MB/s
 
-            ▾  DOWNLOAD
+retro:       RX   12.34 MB/s [######------]
+             TX    1.23 MB/s [##----------]
 
-            ┌───┐ ╶───┐   ╷
-            │   │     │  ██
-            │   │ ┌───┘ ╵ ╵   MB/s
-            │   │ │
-            └───┘ └───╴
+neon:        ▼▼▼
+             12.34 MB/s
+             ▲▲▲
+             1.23 MB/s
 
-            ⟨▓▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░⟩ 65%
-
-            ╶─────────────────────────────╴
-
-            ▴  UPLOAD
-
-                ╶───┐   ┌───┐
-                    │   │   │
-                 ───┤   └───┤   KB/s
-                    │       │
-                ╶───┘   ╶───┘
-
-            ⟨▓▓▓▓▓▓░░░░░░░░░░░░░⟩ 22%
-
-            ╰─────────────────────────────────────╯
+compact:     ▼ 12.34 MB/s  ·  ▲ 1.23 MB/s
+             ━━━━━━━───────    ━━─────────
 ```
 
 ---
