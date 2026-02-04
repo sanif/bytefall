@@ -1,0 +1,11 @@
+bytefall
+*.exe
+.git
+.gitignore
+.planning
+.claude
+.kata.yaml
+README.md
+LICENSE
+dist/
+completions/

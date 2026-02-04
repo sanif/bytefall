@@ -1,0 +1,9 @@
+# Planning and Claude config (local only)
+.planning/
+.claude/
+.kata.yaml
+
+# Build artifacts
+/bytefall
+dist/
+completions/
