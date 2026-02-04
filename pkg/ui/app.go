@@ -24,6 +24,8 @@ const (
 	WidgetProcesses                     // Process map
 	WidgetTimeline                      // Activity sparklines
 	WidgetGraph                         // Connection graph
+	WidgetTopApps                       // Top applications by bandwidth
+	WidgetBandwidth                     // Bandwidth history graph
 )
 
 var widgetMode WidgetMode = WidgetNone
@@ -95,14 +97,6 @@ func SetMatrixOnly(enabled bool) {
 // SetMatrixOptions sets display options for matrix mode (legacy - use SetWidgetOptions)
 func SetMatrixOptions(opts MatrixOptions) {
 	matrixOpts = opts
-	widgetOpts = WidgetOptions{
-		ShowStatusBar: opts.ShowInfo && !opts.Minimal,
-		ShowDownload:  opts.ShowDownload,
-		ShowUpload:    opts.ShowUpload,
-		ShowDomains:   opts.ShowDomains,
-		ShowIP:        opts.ShowIP,
-		ShowPublicIP:  opts.ShowPublicIP,
-	}
 }
 
 // FocusPanel indicates which panel is focused
@@ -239,7 +233,18 @@ type Model struct {
 	lastTotalBytes   int64
 	lastPacketCount  int64
 	bytesPerSec      int64 // Download
-	uploadBytesPerSec int64 // Upload (simulated as ~30% of download for demo)
+	uploadBytesPerSec int64 // Upload
+
+	// System-wide bandwidth (actual OS stats or simulated)
+	sysBandwidth    BandwidthProvider
+	sysDownloadRate int64
+	sysUploadRate   int64
+}
+
+// BandwidthProvider interface for both real and demo bandwidth
+type BandwidthProvider interface {
+	GetRates() (download, upload int64)
+	Stop()
 }
 
 // NewModel creates a new application model
@@ -252,23 +257,38 @@ func NewModel(cap *capture.Capture, pm *data.ProcessMapper, stats data.StatsProv
 	netMon := data.NewNetworkMonitor(iface)
 	netMon.Start()
 
+	// Use real or demo bandwidth based on whether we have capture
+	var sysBw BandwidthProvider
+	if cap != nil {
+		// Real mode: use actual system interface stats
+		realBw := data.NewSystemBandwidth(iface)
+		realBw.Start()
+		sysBw = realBw
+	} else {
+		// Demo mode: use simulated bandwidth
+		demoBw := data.NewDemoSystemBandwidth()
+		demoBw.Start()
+		sysBw = demoBw
+	}
+
 	return Model{
-		matrix:      NewMatrixPanel(80, 20),
-		leaderboard: NewLeaderboardPanel(60, 15),
-		processMap:  NewProcessMapPanel(60, 15),
-		timeline:    NewTimelinePanel(120, 10),
-		netInfo:     NewNetInfoBar(120),
-		speedTest:   NewSpeedTestPopup(),
-		domainInfo:  NewDomainInfoPopup(),
-		connGraph:   NewConnectionGraphPanel(80, 20),
-		animBorder:  NewAnimatedBorder(),
-		focus:       FocusMatrix,
-		keymap:      DefaultKeyMap(),
-		help:        help.New(),
-		capture:     cap,
-		processMap_: pm,
-		stats:       stats,
-		netMonitor:  netMon,
+		matrix:       NewMatrixPanel(80, 20),
+		leaderboard:  NewLeaderboardPanel(60, 15),
+		processMap:   NewProcessMapPanel(60, 15),
+		timeline:     NewTimelinePanel(120, 10),
+		netInfo:      NewNetInfoBar(120),
+		speedTest:    NewSpeedTestPopup(),
+		domainInfo:   NewDomainInfoPopup(),
+		connGraph:    NewConnectionGraphPanel(80, 20),
+		animBorder:   NewAnimatedBorder(),
+		focus:        FocusMatrix,
+		keymap:       DefaultKeyMap(),
+		help:         help.New(),
+		capture:      cap,
+		processMap_:  pm,
+		stats:        stats,
+		netMonitor:   netMon,
+		sysBandwidth: sysBw,
 	}
 }
 
@@ -337,6 +357,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.netMonitor != nil {
 				m.netMonitor.Stop()
 			}
+			if m.sysBandwidth != nil {
+				m.sysBandwidth.Stop()
+			}
 			return m, tea.Quit
 
 		case key.Matches(msg, m.keymap.Pause):
@@ -350,6 +373,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.updateFocus()
 
 		case key.Matches(msg, m.keymap.SpeedTest):
+			// In speed widget mode, 's' cycles through styles
+			if widgetMode == WidgetSpeed {
+				CycleSpeedStyle()
+				return m, nil
+			}
+			// Otherwise, show/restart speed test
 			if m.speedTest.IsVisible() {
 				m.speedTest.Restart()
 			} else {
@@ -459,7 +488,7 @@ func (m *Model) updateStats() {
 	m.lastStats = stats
 	m.totalDomains = len(stats)
 
-	// Count total packets and bytes
+	// Count total packets and bytes (from captured traffic)
 	var totalPkts int64
 	var totalBytes int64
 	for _, s := range stats {
@@ -468,17 +497,28 @@ func (m *Model) updateStats() {
 	}
 	m.totalPackets = totalPkts
 
-	// Calculate bytes per second (download)
-	m.bytesPerSec = totalBytes - m.lastTotalBytes
-	if m.bytesPerSec < 0 {
-		m.bytesPerSec = 0
+	// Calculate captured traffic bytes per second
+	capturedBytesPerSec := totalBytes - m.lastTotalBytes
+	if capturedBytesPerSec < 0 {
+		capturedBytesPerSec = 0
 	}
 	m.lastTotalBytes = totalBytes
 
-	// Simulate upload as ~20-35% of download (realistic ratio for browsing)
-	// In real capture mode, this would come from actual outgoing packets
-	uploadRatio := 0.2 + float64(m.tick%15)*0.01 // Varies between 20-35%
-	m.uploadBytesPerSec = int64(float64(m.bytesPerSec) * uploadRatio)
+	// Get system-wide bandwidth (actual OS interface stats)
+	if m.sysBandwidth != nil {
+		m.sysDownloadRate, m.sysUploadRate = m.sysBandwidth.GetRates()
+		// Use system-wide rates for display
+		m.bytesPerSec = m.sysDownloadRate
+		m.uploadBytesPerSec = m.sysUploadRate
+	} else {
+		// Fallback to captured traffic with simulated upload ratio
+		m.bytesPerSec = capturedBytesPerSec
+		uploadRatio := 0.2 + float64(m.tick%15)*0.01
+		m.uploadBytesPerSec = int64(float64(m.bytesPerSec) * uploadRatio)
+	}
+
+	// Record bandwidth history for graph widget
+	RecordBandwidth(m.bytesPerSec, m.uploadBytesPerSec)
 
 	// Update matrix with traffic rate
 	m.matrix.UpdateTrafficRate(m.bytesPerSec, totalPkts)
@@ -540,6 +580,10 @@ func (m Model) View() string {
 		return m.renderWidgetTimeline(theme)
 	case WidgetGraph:
 		return m.renderWidgetGraph(theme)
+	case WidgetTopApps:
+		return m.renderWidgetTopApps(theme)
+	case WidgetBandwidth:
+		return m.renderWidgetBandwidth(theme)
 	}
 
 	// Mini mode
@@ -757,6 +801,40 @@ func (m Model) renderWidgetGraph(theme Theme) string {
 	}
 
 	return panel
+}
+
+// renderWidgetTopApps renders fullscreen top applications widget
+func (m Model) renderWidgetTopApps(theme Theme) string {
+	contentHeight := m.height
+	if widgetOpts.ShowStatusBar {
+		contentHeight = m.height - 1
+	}
+
+	content := RenderTopAppsWidget(m.width, contentHeight, m.lastStats, theme)
+
+	if widgetOpts.ShowStatusBar {
+		statusBar := m.renderStatusBar(theme)
+		return statusBar + "\n" + content
+	}
+
+	return content
+}
+
+// renderWidgetBandwidth renders fullscreen bandwidth history graph
+func (m Model) renderWidgetBandwidth(theme Theme) string {
+	contentHeight := m.height
+	if widgetOpts.ShowStatusBar {
+		contentHeight = m.height - 1
+	}
+
+	content := RenderBandwidthGraphWidget(m.width, contentHeight, m.bytesPerSec, m.uploadBytesPerSec, theme)
+
+	if widgetOpts.ShowStatusBar {
+		statusBar := m.renderStatusBar(theme)
+		return statusBar + "\n" + content
+	}
+
+	return content
 }
 
 // renderMatrixOnly is kept for legacy compatibility

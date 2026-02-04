@@ -1,0 +1,84 @@
+# GoReleaser configuration for ByteFall
+# Documentation: https://goreleaser.com
+
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: bytefall
+    main: ./cmd/bytefall
+    binary: bytefall
+    env:
+      - CGO_ENABLED=1
+    goos:
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+
+universal_binaries:
+  - id: bytefall-universal
+    ids:
+      - bytefall
+    replace: true
+    name_template: bytefall
+
+archives:
+  - id: default
+    format: tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - LICENSE
+
+checksum:
+  name_template: 'checksums.txt'
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - Merge pull request
+      - Merge branch
+
+brews:
+  - name: bytefall
+    repository:
+      owner: sanif
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Tag }}"
+    directory: Formula
+    homepage: "https://github.com/sanif/bytefall"
+    description: "Real-time network traffic visualization with Matrix-style aesthetics"
+    license: "MIT"
+    install: |
+      bin.install "bytefall"
+    test: |
+      system "#{bin}/bytefall", "-version"
+    caveats: |
+      ByteFall requires root privileges for packet capture.
+      Run with: sudo bytefall
+
+      Or use demo mode without privileges:
+        bytefall -demo
+
+release:
+  github:
+    owner: sanif
+    name: bytefall
+  draft: false
+  prerelease: auto
+  name_template: "v{{.Version}}"

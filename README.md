@@ -12,12 +12,15 @@ ByteFall answers the question: *"Where is my data actually going right now?"* �
 
 ## Features
 
+- **System-wide Bandwidth** — Real-time monitoring of all network traffic across all protocols and ports
 - **Matrix Rain Visualization** — Animated falling character streams colored by domain, with intensity reflecting traffic volume
-- **Domain Leaderboard** — Real-time ranking of destinations by bytes/second
+- **Domain Leaderboard** — Real-time ranking of HTTP/HTTPS destinations by bytes/second
 - **Process Mapping** — See which applications are connecting to which domains
 - **Activity Timeline** — 60-second sparkline history per domain
 - **Connection Graph** — Animated visualization of active connections
-- **Network Speed Widget** — Large fullscreen speed display with ↓/↑ gauges
+- **Network Speed Widget** — Large fullscreen speed display with 5 visual styles (system-wide)
+- **Bandwidth History** — Historical graphs of download/upload rates with peak/average stats
+- **Top Applications** — Ranked list of apps by bandwidth usage with icons
 - **Widget Modes** — Run any panel as a clean fullscreen widget
 - **SNI Extraction** — Identifies domains from TLS ClientHello handshakes
 - **Process Detection** — Maps network connections to their source processes
@@ -117,6 +120,11 @@ Widget Modes (fullscreen, clean by default):
   -processes        Fullscreen process map widget
   -timeline         Fullscreen activity timeline widget
   -graph            Fullscreen connection graph widget
+  -apps             Fullscreen top applications by bandwidth
+  -bandwidth        Fullscreen bandwidth history graph
+
+Speed Widget Styles:
+  -speed-style <s>  Style: minimal, boxed, retro, neon, compact (default: boxed)
 
 Status Bar Options (for widget modes):
   -bar              Show status bar in widget mode (off by default)
@@ -144,14 +152,23 @@ sudo bytefall -theme cyberpunk
 
 # Widget modes (clean, fullscreen)
 bytefall -demo -matrix           # Matrix rain
-bytefall -demo -speed            # Network speed with ↓/↑ gauges
+bytefall -demo -speed            # Network speed gauges
 bytefall -demo -leaderboard      # Domain rankings
+bytefall -demo -apps             # Top applications
+bytefall -demo -bandwidth        # Bandwidth history
 bytefall -demo -timeline         # Activity sparklines
 bytefall -demo -graph            # Connection graph
 
+# Speed widget with different styles
+bytefall -demo -speed -speed-style neon      # Cyberpunk neon style
+bytefall -demo -speed -speed-style retro     # Retro terminal style
+bytefall -demo -speed -speed-style minimal   # Clean minimal style
+bytefall -demo -speed -speed-style compact   # Compact dense style
+
 # Widget with status bar
 bytefall -demo -matrix -bar
-bytefall -demo -speed -bar -ip -public-ip
+bytefall -demo -speed -bar -ip
+bytefall -demo -apps -bar -public-ip
 ```
 
 ---
@@ -167,7 +184,7 @@ bytefall -demo -speed -bar -ip -public-ip
 | `Shift+Tab` | Focus previous panel |
 | `f` | Toggle fullscreen for focused panel |
 | `t` | Cycle through themes |
-| `s` | Run speed test |
+| `s` | Run speed test (or cycle styles in speed widget) |
 | `d` | Show domain details |
 | `g` | Toggle connection graph |
 | `?` | Show help |
@@ -176,40 +193,126 @@ bytefall -demo -speed -bar -ip -public-ip
 
 ## Widget Modes
 
-ByteFall can run any panel as a clean, fullscreen widget — perfect for desktop dashboards or ambient displays.
+ByteFall can run any panel as a clean, fullscreen widget — perfect for desktop dashboards, ambient displays, or monitoring setups.
 
 | Flag | Widget | Description |
 |------|--------|-------------|
-| `-matrix` | Matrix Rain | Animated falling characters |
+| `-matrix` | Matrix Rain | Animated falling characters colored by traffic |
 | `-speed` | Network Speed | Large ↓/↑ speed display with gauges |
 | `-leaderboard` | Domain Rankings | Full-screen sorted domain list |
 | `-processes` | Process Map | Process-to-domain tree view |
 | `-timeline` | Activity Timeline | Sparklines for all domains |
 | `-graph` | Connection Graph | Process cards with connections |
+| `-apps` | Top Applications | Ranked apps by bandwidth with icons |
+| `-bandwidth` | Bandwidth Graph | Historical download/upload line graphs |
 
 By default, widget modes show only the content (clean mode). Add `-bar` to include a status bar with network info.
 
 ```bash
-# Clean matrix rain (no status bar)
-bytefall -demo -matrix
+# Widget examples
+bytefall -demo -matrix           # Matrix rain
+bytefall -demo -speed            # Network speed gauges
+bytefall -demo -leaderboard      # Domain rankings
+bytefall -demo -apps             # Top applications
+bytefall -demo -bandwidth        # Bandwidth history
+bytefall -demo -timeline         # Activity sparklines
+bytefall -demo -graph            # Connection graph
 
-# Speed widget with status bar showing IP
+# Add status bar with -bar
 bytefall -demo -speed -bar -ip
-
-# Leaderboard with full network info
-bytefall -demo -leaderboard -bar -ip -public-ip
+bytefall -demo -apps -bar -public-ip
 ```
 
-### Speed Widget Preview
+---
+
+### Speed Widget
+
+Large **system-wide** network speed display with animated gauges and 5 visual styles. Shows actual bandwidth across all protocols and ports (not just HTTP/HTTPS).
+
+**Styles** (set via `-speed-style` or press `s` to cycle):
+
+| Style | Description |
+|-------|-------------|
+| `minimal` | Clean arrows and numbers |
+| `boxed` | Decorative frames and gauges (default) |
+| `retro` | Old terminal green aesthetic |
+| `neon` | Cyberpunk pink/cyan glow |
+| `compact` | Dense single-line display |
+
+**Auto-sizing**: Digits scale based on terminal size (large/medium/small).
 
 ```
-                    ↓ 12.5 MB/s
-         ████████████████░░░░░░░░░░░░░░
+            ╭─────  NETWORK SPEED  ─────╮
 
-                    ↑ 3.2 MB/s
-         █████░░░░░░░░░░░░░░░░░░░░░░░░░
+            ▾  DOWNLOAD
 
-                 ◈ 1,234 packets/s
+            ┌───┐ ╶───┐   ╷
+            │   │     │  ██
+            │   │ ┌───┘ ╵ ╵   MB/s
+            │   │ │
+            └───┘ └───╴
+
+            ⟨▓▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░⟩ 65%
+
+            ╶─────────────────────────────╴
+
+            ▴  UPLOAD
+
+                ╶───┐   ┌───┐
+                    │   │   │
+                 ───┤   └───┤   KB/s
+                    │       │
+                ╶───┘   ╶───┘
+
+            ⟨▓▓▓▓▓▓░░░░░░░░░░░░░⟩ 22%
+
+            ╰─────────────────────────────────────╯
+```
+
+---
+
+### Top Applications Widget
+
+Shows which apps are using your bandwidth, ranked by traffic volume with icons.
+
+```
+═══════  ◆ TOP APPLICATIONS ◆  ═══════
+
+     APPLICATION        TRAFFIC   DOMAINS
+─────────────────────────────────────────
+ ★ 🌐 Chrome           45.2 MB       12  ████████████████░░░░
+ 2. 💬 Slack           12.1 MB        3  ████░░░░░░░░░░░░░░░░
+ 3. 💻 Code             8.4 MB        8  ███░░░░░░░░░░░░░░░░░
+ 4. 🐳 Docker           3.2 MB        2  █░░░░░░░░░░░░░░░░░░░
+
+Total: 4 apps  •  68.9 MB transferred
+```
+
+---
+
+### Bandwidth History Widget
+
+Real-time graphs showing **system-wide** download and upload speeds over time with peak/average stats. Tracks all network traffic across all protocols and ports.
+
+```
+═══════  ◆ BANDWIDTH HISTORY ◆  ═══════
+
+         ↓ 12.5 MB/s  │  ↑ 3.2 MB/s
+
+            ▼ DOWNLOAD
+ 12.5M │        ▄█▆▄
+       │      ▂▆████▅▃
+       │    ▁▄████████▆▄▂
+     0 └──────────────────┘
+
+            ▲ UPLOAD
+  3.2M │    ▃▅▄
+       │  ▂▅███▅▃▂
+       │ ▁███████▆▄▃▂▁
+     0 └──────────────────┘
+
+Peak: ↓ 15.8 MB/s  •  ↑ 4.1 MB/s
+Avg:  ↓ 8.2 MB/s   •  ↑ 1.8 MB/s
 ```
 
 ---
@@ -244,26 +347,28 @@ bytefall/
 ### Data Flow
 
 ```
-Packets → Capture → SNI/DNS Resolution → Process Mapping → Aggregation → TUI
+System Interface → netstat → System Bandwidth (all traffic)
+Packets → Capture → SNI/DNS → Process Mapping → Domain Stats (HTTP/HTTPS)
 ```
 
 **Key Components:**
 
-- **Capture**: Uses libpcap via gopacket to sniff TCP traffic on ports 80/443
+- **System Bandwidth**: Reads actual interface statistics via `netstat -ib` for true system-wide bandwidth
+- **Capture**: Uses libpcap via gopacket to sniff TCP traffic on ports 80/443 for domain tracking
 - **SNI Extraction**: Parses TLS ClientHello to identify destination domains
 - **Process Mapping**: Correlates connections to processes using `lsof`
 - **Aggregator**: Maintains real-time stats with 60-second rolling history
-- **TUI**: BubbleTea-based interface with 4 synchronized panels
+- **TUI**: BubbleTea-based interface with synchronized panels
 
 ---
 
 ## Limitations
 
 - **macOS only** (v1) — Linux/Windows support planned for future versions
-- **Ports 80/443 only** — HTTP/HTTPS traffic
+- **Domain tracking: Ports 80/443 only** — Domain identification uses HTTP/HTTPS traffic (speed widgets show all traffic)
 - **Domain-level visibility** — Full URL paths are encrypted (no MITM)
 - **Real-time only** — No historical data persistence
-- **Outbound traffic only** — Inbound connections not tracked
+- **Outbound traffic only** — Inbound connections not tracked for domain stats
 
 ---
 

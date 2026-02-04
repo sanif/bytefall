@@ -13,7 +13,8 @@ import (
 	"github.com/sanif/bytefall/pkg/ui"
 )
 
-const version = "0.1.0"
+// version is set by goreleaser via ldflags
+var version = "dev"
 
 func main() {
 	// Parse flags
@@ -32,6 +33,11 @@ func main() {
 	processesOnly := flag.Bool("processes", false, "Fullscreen process map widget")
 	timelineOnly := flag.Bool("timeline", false, "Fullscreen activity timeline widget")
 	graphOnly := flag.Bool("graph", false, "Fullscreen connection graph widget")
+	topAppsOnly := flag.Bool("apps", false, "Fullscreen top applications widget")
+	bandwidthOnly := flag.Bool("bandwidth", false, "Fullscreen bandwidth history graph")
+
+	// Speed widget style
+	speedStyleFlag := flag.String("speed-style", "boxed", "Speed widget style (minimal, boxed, retro, neon, compact)")
 
 	// Status bar options (off by default in widget mode)
 	showBar := flag.Bool("bar", false, "Show status bar in widget mode")
@@ -96,10 +102,28 @@ func main() {
 		widgetMode = ui.WidgetTimeline
 	case *graphOnly:
 		widgetMode = ui.WidgetGraph
+	case *topAppsOnly:
+		widgetMode = ui.WidgetTopApps
+	case *bandwidthOnly:
+		widgetMode = ui.WidgetBandwidth
 	}
 
 	// Set widget mode and options
 	ui.SetWidgetMode(widgetMode)
+
+	// Set speed widget style
+	switch *speedStyleFlag {
+	case "minimal":
+		ui.SetSpeedStyle(ui.SpeedStyleMinimal)
+	case "boxed":
+		ui.SetSpeedStyle(ui.SpeedStyleBoxed)
+	case "retro":
+		ui.SetSpeedStyle(ui.SpeedStyleRetro)
+	case "neon":
+		ui.SetSpeedStyle(ui.SpeedStyleNeon)
+	case "compact":
+		ui.SetSpeedStyle(ui.SpeedStyleCompact)
+	}
 
 	// Determine if status bar should be shown
 	// -bar explicitly enables it, -minimal explicitly disables it
@@ -228,6 +252,11 @@ WIDGET MODES (fullscreen, clean by default):
     -processes        Fullscreen process map widget
     -timeline         Fullscreen activity timeline widget
     -graph            Fullscreen connection graph widget
+    -apps             Fullscreen top applications by bandwidth
+    -bandwidth        Fullscreen bandwidth history graph
+
+SPEED WIDGET STYLES:
+    -speed-style <s>  Style for speed widget: minimal, boxed, retro, neon, compact
 
 STATUS BAR OPTIONS (for widget modes):
     -bar              Show status bar in widget mode (off by default)
@@ -252,16 +281,15 @@ KEY BINDINGS:
 
 EXAMPLES:
     sudo bytefall                         # Run with default settings
-    sudo bytefall -i en0                  # Capture on specific interface
-    sudo bytefall -theme cyberpunk        # Use cyberpunk theme
     bytefall -demo                        # Demo mode (no privileges needed)
-    bytefall -demo -matrix                # Matrix rain widget (clean)
-    bytefall -demo -matrix -bar           # Matrix with status bar
+    bytefall -demo -matrix                # Matrix rain widget
     bytefall -demo -speed                 # Network speed widget
-    bytefall -demo -speed -bar            # Speed widget with status bar
-    bytefall -demo -leaderboard -bar -ip  # Leaderboard with IP info
-    bytefall -demo -timeline              # Activity timeline widget
-    bytefall -demo -graph -bar            # Connection graph with status bar
+    bytefall -demo -speed -speed-style neon      # Neon style speed widget
+    bytefall -demo -apps                  # Top applications by bandwidth
+    bytefall -demo -bandwidth             # Bandwidth history graph
+    bytefall -demo -leaderboard           # Domain leaderboard
+    bytefall -demo -timeline              # Activity timeline
+    bytefall -demo -graph                 # Connection graph
 
 SHELL COMPLETION:
     # Bash (add to ~/.bashrc)
@@ -284,7 +312,7 @@ _bytefall() {
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    opts="-i -list -demo -matrix -speed -leaderboard -processes -timeline -graph -theme -bar -down -up -domains -ip -public-ip -version -completion"
+    opts="-i -list -demo -matrix -speed -leaderboard -processes -timeline -graph -apps -bandwidth -theme -speed-style -bar -down -up -domains -ip -public-ip -version -completion"
 
     case "${prev}" in
         -i)
@@ -294,6 +322,10 @@ _bytefall() {
             ;;
         -theme)
             COMPREPLY=( $(compgen -W "matrix cyberpunk amber ocean blood" -- ${cur}) )
+            return 0
+            ;;
+        -speed-style)
+            COMPREPLY=( $(compgen -W "minimal boxed retro neon compact" -- ${cur}) )
             return 0
             ;;
         -completion)
@@ -324,7 +356,10 @@ _bytefall() {
         '-processes[Fullscreen process map widget]'
         '-timeline[Fullscreen activity timeline widget]'
         '-graph[Fullscreen connection graph widget]'
+        '-apps[Fullscreen top applications widget]'
+        '-bandwidth[Fullscreen bandwidth history graph]'
         '-theme[Color theme]:theme:->themes'
+        '-speed-style[Speed widget style]:style:->speedstyles'
         '-bar[Show status bar in widget mode]'
         '-down[Show download speed in status bar]'
         '-up[Show upload speed in status bar]'
@@ -335,6 +370,7 @@ _bytefall() {
         '-completion[Generate shell completion]:shell:->shells'
     )
     themes=(matrix cyberpunk amber ocean blood)
+    speedstyles=(minimal boxed retro neon compact)
     shells=(bash zsh fish)
 
     _arguments -s $opts
@@ -347,6 +383,9 @@ _bytefall() {
             ;;
         themes)
             _describe 'theme' themes
+            ;;
+        speedstyles)
+            _describe 'style' speedstyles
             ;;
         shells)
             _describe 'shell' shells
@@ -369,7 +408,10 @@ complete -c bytefall -l leaderboard -d 'Fullscreen domain leaderboard widget'
 complete -c bytefall -l processes -d 'Fullscreen process map widget'
 complete -c bytefall -l timeline -d 'Fullscreen activity timeline widget'
 complete -c bytefall -l graph -d 'Fullscreen connection graph widget'
+complete -c bytefall -l apps -d 'Fullscreen top applications widget'
+complete -c bytefall -l bandwidth -d 'Fullscreen bandwidth history graph'
 complete -c bytefall -l theme -d 'Color theme' -xa "matrix cyberpunk amber ocean blood"
+complete -c bytefall -l speed-style -d 'Speed widget style' -xa "minimal boxed retro neon compact"
 complete -c bytefall -l bar -d 'Show status bar in widget mode'
 complete -c bytefall -l down -d 'Show download speed in status bar'
 complete -c bytefall -l up -d 'Show upload speed in status bar'
